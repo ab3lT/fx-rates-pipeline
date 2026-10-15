@@ -1,0 +1,67 @@
+# Production stack: PostgreSQL, the Flask dashboard (gunicorn) and the scheduler.
+#
+#   cp .env.prod.example .env.prod      # then edit the secrets
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# The web container only listens on 127.0.0.1:8000; put nginx (deploy/nginx.conf)
+# in front of it for the public domain and HTTPS.
+
+x-app-env: &app-env
+  FX_DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+  FX_BASE_CURRENCY: ${FX_BASE_CURRENCY:-USD}
+  FX_SYMBOLS: ${FX_SYMBOLS:-EUR,GBP,JPY,CNY,CHF,CAD,AUD,INR}
+  FX_SCHEDULE_HOURS: ${FX_SCHEDULE_HOURS:-6}
+  FX_BACKFILL_DAYS: ${FX_BACKFILL_DAYS:-365}
+  FX_ADMIN_TOKEN: ${FX_ADMIN_TOKEN:-}
+  FX_LOG_LEVEL: ${FX_LOG_LEVEL:-INFO}
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *app-env
+    entrypoint: ["gunicorn"]
+    command:
+      - "fx_etl.web:create_app()"
+      - "--bind=0.0.0.0:8000"
+      - "--workers=2"
+      - "--threads=4"
+      - "--access-logfile=-"
+      - "--forwarded-allow-ips=*"
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  scheduler:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *app-env
+    entrypoint: ["python", "-m", "fx_etl.web.scheduler"]
+
+volumes:
+  pgdata:
