@@ -7,8 +7,10 @@ against a local SQLite file.
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -22,7 +24,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///fx.db"
     api_base_url: str = "https://api.frankfurter.dev/v1"
     base_currency: str = "USD"
-    symbols: list[str] = Field(default_factory=lambda: ["EUR", "GBP", "JPY", "CNY", "ETB"])
+    # NoDecode stops pydantic-settings parsing the env value as JSON, so the
+    # comma-separated form below reaches _split_symbols intact.
+    symbols: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["EUR", "GBP", "JPY", "CNY", "ETB"])
 
     request_timeout: float = 30.0
     max_retries: int = 4
