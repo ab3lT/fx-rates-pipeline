@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fx
+      POSTGRES_PASSWORD: fx
+      POSTGRES_DB: fx
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fx"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  etl:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      FX_DATABASE_URL: postgresql+psycopg2://fx:fx@db:5432/fx
+      FX_BASE_CURRENCY: USD
+      FX_SYMBOLS: EUR,GBP,JPY,CNY,ETB
+      FX_LOG_LEVEL: INFO
+    # Override at runtime, e.g.:
+    #   docker compose run --rm etl --start 2024-01-01 --end 2024-01-31
+    command: []
+
+volumes:
+  pgdata:
