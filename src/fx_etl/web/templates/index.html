@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FX Rates ETL · Abel Tadesse</title>
+  <meta name="description" content="A production-shaped ETL pipeline for foreign exchange rates: extract, transform, data quality checks and idempotent loads into PostgreSQL, with a live dashboard.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%232563eb'/><path d='M7 21l6-6 4 4 8-8' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="/">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><path d="M7 21l6-6 4 4 8-8" /></svg>
+        </span>
+        FX Rates ETL
+      </a>
+      <nav class="nav">
+        <a href="#dashboard">Dashboard</a>
+        <a href="#runs">Pipeline runs</a>
+        <a href="#how">How it works</a>
+        <a href="https://github.com/ab3lT" target="_blank" rel="noopener" class="btn btn-ghost">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero wrap">
+      <div>
+        <p class="eyebrow">Data engineering portfolio</p>
+        <h1>Foreign exchange rates, pulled from an API, checked and loaded on a schedule</h1>
+        <p class="lede">
+          This pipeline pulls daily rates from the Frankfurter API and cleans them with pandas.
+          It runs data quality checks and upserts the rows into PostgreSQL, so running it twice never duplicates data.
+          Everything on this page comes live from that database.
+        </p>
+      </div>
+      <div class="status-card" id="status-card">
+        <div class="status-row">
+          <span class="dot" id="status-dot"></span>
+          <span id="status-text">Checking pipeline…</span>
+        </div>
+        <dl class="status-meta">
+          <div><dt>Last run</dt><dd id="status-last">—</dd></div>
+          <div><dt>Schedule</dt><dd id="status-schedule">—</dd></div>
+          <div><dt>Base currency</dt><dd id="status-base">{{ settings.base_currency }}</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="wrap kpis" aria-label="Key figures">
+      <div class="kpi"><span class="kpi-label">Rows in warehouse</span><span class="kpi-value" id="kpi-rows">—</span></div>
+      <div class="kpi"><span class="kpi-label">Date coverage</span><span class="kpi-value" id="kpi-coverage">—</span></div>
+      <div class="kpi"><span class="kpi-label">Pipeline runs</span><span class="kpi-value" id="kpi-runs">—</span></div>
+      <div class="kpi"><span class="kpi-label">Run success rate</span><span class="kpi-value" id="kpi-success">—</span></div>
+    </section>
+
+    <section class="wrap" id="dashboard">
+      <div class="section-head">
+        <h2>Latest rates</h2>
+        <p class="muted" id="latest-date"></p>
+      </div>
+      <div class="tiles" id="tiles">
+        <div class="tile skeleton"></div><div class="tile skeleton"></div><div class="tile skeleton"></div><div class="tile skeleton"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card chart-card">
+          <div class="card-head">
+            <div>
+              <h3 id="chart-title">Rate history</h3>
+              <p class="muted small" id="chart-sub"></p>
+            </div>
+            <div class="seg" role="group" aria-label="Range" id="range">
+              <button data-days="30">1M</button>
+              <button data-days="90" class="active">3M</button>
+              <button data-days="180">6M</button>
+              <button data-days="365">1Y</button>
+            </div>
+          </div>
+          <div class="chart-box"><canvas id="chart" aria-label="Exchange rate history chart" role="img"></canvas></div>
+        </div>
+
+        <div class="card converter">
+          <h3>Converter</h3>
+          <p class="muted small">Cross rates are worked out from the stored {{ settings.base_currency }} rates.</p>
+          <label class="field">
+            <span>Amount</span>
+            <input type="number" id="conv-amount" value="100" min="0" step="any" inputmode="decimal">
+          </label>
+          <div class="conv-pair">
+            <label class="field"><span>From</span><select id="conv-from"></select></label>
+            <button class="swap" id="conv-swap" aria-label="Swap currencies" title="Swap">⇄</button>
+            <label class="field"><span>To</span><select id="conv-to"></select></label>
+          </div>
+          <div class="conv-result">
+            <span class="conv-value" id="conv-result">—</span>
+            <span class="muted small" id="conv-rate"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="wrap" id="runs">
+      <div class="section-head">
+        <h2>Pipeline runs</h2>
+        <p class="muted">Every run is recorded with the result of each data quality check. Click a row to see them.</p>
+      </div>
+      <div class="card table-card">
+        <table class="runs">
+          <thead>
+            <tr><th>Started</th><th>Trigger</th><th>Window</th><th>Status</th><th class="num">Rows</th><th class="num">Duration</th></tr>
+          </thead>
+          <tbody id="runs-body">
+            <tr><td colspan="6" class="muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="wrap" id="how">
+      <div class="section-head">
+        <h2>How it works</h2>
+        <p class="muted">Each stage is a small module you can test on its own. Bad data stops at the quality gate and never reaches the database.</p>
+      </div>
+      <ol class="flow">
+        <li><span class="step">01</span><h4>Extract</h4><p>An httpx client calls the Frankfurter API and retries with exponential backoff (tenacity). CSV files go through the same interface.</p><code>extract.py</code></li>
+        <li><span class="step">02</span><h4>Transform</h4><p>pandas sets the types, cleans the rows, removes duplicates and adds the day-on-day % change for each currency pair.</p><code>transform.py</code></li>
+        <li><span class="step">03</span><h4>Quality gate</h4><p>Critical checks (nulls, positive rates, duplicates) stop the run. Warning checks (missing currencies, moves over 25%) are logged and the run continues.</p><code>quality.py</code></li>
+        <li><span class="step">04</span><h4>Load</h4><p>Each row is validated with pydantic, then upserted with <code>ON CONFLICT</code> using SQL that matches the database (PostgreSQL or SQLite).</p><code>load.py</code></li>
+        <li><span class="step">05</span><h4>Serve</h4><p>A scheduler process runs the pipeline every few hours. A Flask API behind gunicorn and nginx serves this dashboard.</p><code>web/</code></li>
+      </ol>
+      <ul class="stack">
+        <li>Python 3.12</li><li>pandas</li><li>SQLAlchemy 2</li><li>pydantic</li><li>httpx + tenacity</li>
+        <li>PostgreSQL 16</li><li>Flask</li><li>gunicorn</li><li>Docker Compose</li><li>nginx</li><li>pytest</li><li>GitHub Actions</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="wrap footer">
+    <span>Built by Abel Tadesse · v{{ version }}</span>
+    <span>Data: <a href="https://frankfurter.dev" target="_blank" rel="noopener">Frankfurter</a> (European Central Bank reference rates)</span>
+    <span><a href="/api/summary">JSON API</a></span>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
