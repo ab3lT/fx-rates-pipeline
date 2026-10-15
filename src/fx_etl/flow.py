@@ -22,7 +22,7 @@ from .config import get_settings
 def extract_task(settings, start, end):
     import httpx
 
-    with httpx.Client(timeout=settings.request_timeout) as client:
+    with httpx.Client(timeout=settings.request_timeout, follow_redirects=True) as client:
         payload = extract.fetch_timeseries(
             client, settings.api_base_url, start, end,
             settings.base_currency, settings.symbols, settings.max_retries,

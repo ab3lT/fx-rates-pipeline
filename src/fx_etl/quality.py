@@ -51,6 +51,10 @@ class QualityReport:
 class DataQualityError(RuntimeError):
     """Raised when a critical data quality check fails."""
 
+    def __init__(self, message: str, report: QualityReport | None = None) -> None:
+        super().__init__(message)
+        self.report = report
+
 
 def run_checks(frame: pd.DataFrame, expected_symbols: list[str] | None = None) -> QualityReport:
     """Run all checks against a transformed frame and return a report."""

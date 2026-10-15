@@ -30,7 +30,7 @@ def _extract_records(settings: Settings, start: dt.date, end: dt.date, source: s
             raise ValueError("source=file requires a file path")
         return extract.load_records_from_csv(file)
 
-    with httpx.Client(timeout=settings.request_timeout) as client:
+    with httpx.Client(timeout=settings.request_timeout, follow_redirects=True) as client:
         payload = extract.fetch_timeseries(
             client=client,
             base_url=settings.api_base_url,
@@ -72,7 +72,7 @@ def run_pipeline(
 
     if not report.ok:
         failed = [r.name for r in report.results if r.critical and not r.passed]
-        raise quality.DataQualityError(f"critical checks failed: {failed}")
+        raise quality.DataQualityError(f"critical checks failed: {failed}", report=report)
 
     engine = load.get_engine(settings.database_url)
     load.init_db(engine)

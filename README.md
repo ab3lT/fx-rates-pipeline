@@ -17,6 +17,9 @@ Built to show how I approach real pipeline work: the specification is the source
 | Configuration from environment, sensible defaults | `config.py` (pydantic-settings) |
 | Structured logging | `logging_config.py` |
 | Orchestration ready | `flow.py` (optional Prefect flow) |
+| Web dashboard and JSON API | `web/` (Flask + Chart.js, served by gunicorn) |
+| Scheduled runs with an audit trail of every run and check | `web/scheduler.py`, `web/runs.py` |
+| Production deployment | `docker-compose.prod.yml`, `deploy/` (nginx + HTTPS) |
 | Tests for every stage | `tests/` (pytest) |
 | Containerisation and CI | `Dockerfile`, `docker-compose.yml`, GitHub Actions |
 
@@ -48,6 +51,13 @@ make run
 PYTHONPATH=src python -m fx_etl.cli --start 2024-01-01 --end 2024-01-31
 ```
 
+Run the dashboard locally (after loading some data with one of the commands above):
+
+```bash
+make web          # http://127.0.0.1:5000
+make scheduler    # optional: backfill a year of history, then refresh every 6 hours
+```
+
 Run the tests:
 
 ```bash
@@ -70,6 +80,30 @@ export FX_DATABASE_URL=postgresql+psycopg2://fx:fx@localhost:5432/fx
 make run
 ```
 
+## Web dashboard and API
+
+The `fx_etl.web` package is a small Flask app over the warehouse. It shows the latest rates, the history for each currency pair, a currency converter and the full run history, including the result of every quality check. The same data is available as JSON:
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /api/summary` | Row counts, date coverage, run success rate, last run |
+| `GET /api/latest` | Latest rate and day-on-day change per currency |
+| `GET /api/rates?quote=EUR&days=90` | Time series for one pair |
+| `GET /api/runs?limit=20` | Recent pipeline runs with their quality checks |
+| `POST /api/runs` | Start a run (needs `Authorization: Bearer $FX_ADMIN_TOKEN`) |
+| `GET /api/health` | Liveness and database check |
+
+The scheduler (`python -m fx_etl.web.scheduler`) runs as its own process, so adding web workers never multiplies scheduled runs. Every run is recorded in `pipeline_runs`, including runs that failed.
+
+## Deploying to a VPS
+
+`docker-compose.prod.yml` runs PostgreSQL, the dashboard (gunicorn) and the scheduler. `deploy/nginx.conf` puts the dashboard on your domain with HTTPS. Step-by-step guide: [`deploy/DEPLOY.md`](deploy/DEPLOY.md).
+
+```bash
+cp .env.prod.example .env.prod     # set POSTGRES_PASSWORD and FX_ADMIN_TOKEN
+make prod-up
+```
+
 ## Configuration
 
 All settings are read from the environment (or a `.env` file). Copy `.env.example` to `.env` to change them.
@@ -77,11 +111,16 @@ All settings are read from the environment (or a `.env` file). Copy `.env.exampl
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `FX_DATABASE_URL` | `sqlite:///fx.db` | Any SQLAlchemy URL |
-| `FX_API_BASE_URL` | `https://api.frankfurter.app` | Source API |
+| `FX_API_BASE_URL` | `https://api.frankfurter.dev/v1` | Source API |
 | `FX_BASE_CURRENCY` | `USD` | Base currency |
 | `FX_SYMBOLS` | `EUR,GBP,JPY,CNY,ETB` | Quote currencies |
 | `FX_MAX_RETRIES` | `4` | API retry attempts |
 | `FX_LOG_LEVEL` | `INFO` | Logging level |
+| `FX_SCHEDULE_HOURS` | `6` | Scheduler interval |
+| `FX_BACKFILL_DAYS` | `365` | History loaded on the scheduler's first start |
+| `FX_ADMIN_TOKEN` | empty | Enables `POST /api/runs`; empty disables it |
+
+Frankfurter serves European Central Bank reference rates, so currencies the ECB does not publish (such as ETB) come back missing and trigger the `expected_currencies_present` warning.
 
 ## Data quality
 
@@ -104,6 +143,8 @@ src/fx_etl/
   pipeline.py         orchestrates the stages
   cli.py              command-line entry point
   flow.py             optional Prefect orchestration
+  web/                Flask API, dashboard, scheduler and run tracking
+deploy/               nginx site and VPS deployment guide
 tests/                pytest coverage for every stage
 ```
 
