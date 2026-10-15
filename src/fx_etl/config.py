@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     )
 
     database_url: str = "sqlite:///fx.db"
-    api_base_url: str = "https://api.frankfurter.app"
+    api_base_url: str = "https://api.frankfurter.dev/v1"
     base_currency: str = "USD"
     symbols: list[str] = Field(default_factory=lambda: ["EUR", "GBP", "JPY", "CNY", "ETB"])
 

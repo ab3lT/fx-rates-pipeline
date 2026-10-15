@@ -77,7 +77,7 @@ All settings are read from the environment (or a `.env` file). Copy `.env.exampl
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `FX_DATABASE_URL` | `sqlite:///fx.db` | Any SQLAlchemy URL |
-| `FX_API_BASE_URL` | `https://api.frankfurter.app` | Source API |
+| `FX_API_BASE_URL` | `https://api.frankfurter.dev/v1` | Source API |
 | `FX_BASE_CURRENCY` | `USD` | Base currency |
 | `FX_SYMBOLS` | `EUR,GBP,JPY,CNY,ETB` | Quote currencies |
 | `FX_MAX_RETRIES` | `4` | API retry attempts |
