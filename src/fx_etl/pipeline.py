@@ -72,7 +72,7 @@ def run_pipeline(
 
     if not report.ok:
         failed = [r.name for r in report.results if r.critical and not r.passed]
-        raise quality.DataQualityError(f"critical checks failed: {failed}")
+        raise quality.DataQualityError(f"critical checks failed: {failed}", report=report)
 
     engine = load.get_engine(settings.database_url)
     load.init_db(engine)

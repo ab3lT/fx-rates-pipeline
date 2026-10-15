@@ -33,6 +33,11 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    # Web dashboard and scheduler
+    admin_token: str = ""
+    schedule_hours: float = 6.0
+    backfill_days: int = 365
+
     @field_validator("symbols", mode="before")
     @classmethod
     def _split_symbols(cls, value: object) -> object:
