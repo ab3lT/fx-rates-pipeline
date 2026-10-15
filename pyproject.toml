@@ -18,6 +18,8 @@ dependencies = [
     "tenacity>=8.2",
     "psycopg2-binary>=2.9",
     "python-dateutil>=2.8",
+    "Flask>=3.0",
+    "gunicorn>=22.0",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +31,9 @@ fx-etl = "fx_etl.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"fx_etl.web" = ["templates/*.html", "static/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
