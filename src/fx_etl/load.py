@@ -12,7 +12,7 @@ import math
 from typing import Any
 
 import pandas as pd
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
@@ -28,8 +28,17 @@ def get_engine(database_url: str) -> Engine:
     return create_engine(database_url, future=True)
 
 
+_INIT_LOCK_ID = 724001  # arbitrary, app-wide key for pg_advisory_xact_lock
+
+
 def init_db(engine: Engine) -> None:
-    Base.metadata.create_all(engine)
+    """Create tables if missing. Safe to call from several processes at once."""
+    with engine.begin() as conn:
+        if conn.dialect.name == "postgresql":
+            # Web workers and the scheduler start together; without the lock their
+            # concurrent CREATE TABLEs collide on Postgres' catalog.
+            conn.execute(text("SELECT pg_advisory_xact_lock(:id)"), {"id": _INIT_LOCK_ID})
+        Base.metadata.create_all(conn)
 
 
 def _validate_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
